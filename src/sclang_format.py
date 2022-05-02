@@ -174,49 +174,6 @@ def read_file(arguments):
 
     return data
 
-    # return open(arguments.supercollider_file).read().splitlines()
-
-
-# def get_tree(parser, file_contents):
-#    return parser.parse(bytes(file_contents, "utf8"))
-
-
-def tree_to_string(tree):
-    print("foo")
-
-
-# Language.build_library(
-#    "sclang.so", ["/home/murphy/Downloads/tree-sitter-supercollider"]
-# )
-#
-#
-# tree = parser.parse(
-#    bytes(
-#        """
-# (
-# {
-# var n;
-# n=10;
-#
-# Resonz.ar(
-# Mix.fill(n,{
-# var freq, numcps;
-#
-# freq= rrand(50,560.3);
-# numcps= rrand(2,20);
-# Pan2.ar(Gendy4.ar(6.rand,6.rand,1.0.rand,1.0.rand,freq ,freq, 1.0.rand, 1.0.rand, numcps, SinOsc.kr(exprand(0.02,0.2), 0, numcps/2, numcps/2), 0.5/(n.sqrt)), 1.0.rand2)
-# })
-# ,MouseX.kr(100,2000), MouseY.kr(0.01,1.0))
-# ;
-# }.play
-# )
-# """,
-#        "utf8",
-#    )
-# )
-#
-# for node in traverse_tree(tree):
-#    print(node)
 
 if __name__ == "__main__":
     main()
