@@ -63,6 +63,7 @@ def main():
     # If there is an error in the parsing, return with
     # error code.
     if len(captures) > 0:
+        print("UNPARSABLE")
         sys.exit(1)
 
     ### Run the pre-formatters

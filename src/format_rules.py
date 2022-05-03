@@ -27,8 +27,10 @@ class FormatRule(object):
 class Helpers(object):
     @staticmethod
     def get_all_newline_offsets(data):
-        # Implementation from stack overflow answer
-        return [0] + [match.start() for match in re.finditer("\n", data)]
+        # Use the positive lookbehind technique to match
+        # the character after the newline. The [0] is in place, as the 0th
+        # character is always the start of the first line.
+        return [0] + [match.start() for match in re.finditer("(?<=\n).", data)]
 
     @staticmethod
     def position_offset(data, line, offset):
@@ -51,12 +53,17 @@ class Helpers(object):
 
     @staticmethod
     def replace_range(data, start_offset, end_offset, new_data):
-        # print("############")
-        # print("Start ", start_offset, " [", data[:start_offset], "]", end="")
-        # print()
-        # print("End ", end_offset, " [", data[end_offset:], "]", end="")
-        # print("############")
+        print("############")
+        print(
+            "Start: " + str(start_offset) + " [" + str(data[start_offset]) + "]"
+        )
+        print("End: " + str(end_offset) + " [" + str(data[end_offset]) + "]")
+        print("############")
         return new_data.join([data[:start_offset], data[end_offset:]])
+
+    # @staticmethod
+    # def get_end_position_from_node(node):
+    #    return
 
     @staticmethod
     def edit_data(data, start_edit, end_edit, new_data):
@@ -212,27 +219,9 @@ class BracketSpacing(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
 
-        # print(data)
-
-        # Find an argument list
-        # for node in Helpers.traverse_tree(tree):
-        #    print(node)
-
-        # print("##############")
-
-        # query = language.query(
-        #    """
-        #    (collection) @collection
-        #    (code_block) @code_block
-        #    (function_block) @function_block
-        #    (parameter_list) @parameter_list
-        #    """
-        # )
-        # query = language.query(
-        #    """
-        #    (parameter_list ("|") @parameter_begin("|") @parameter_end) @parameter_list
-        #    """
-        # )
+        # NB: The treesitter will not parse a parameter list with spaces,
+        # so adding (parameter_list ("|") ("|")) @no_space to the query
+        # is moot.
         query = language.query(
             """
            ("(") @no_space_left
@@ -241,76 +230,58 @@ class BracketSpacing(FormatRule):
            ("]") @no_space_right
            ("{") @space_left
            ("}") @space_right
-           (parameter_list ("|") ("|")) @no_space
            """
         )
 
-        captures = query.captures(tree.root_node)
-
-        # Sort the list so that the match that is at the last position
+        # Sort the results so that the match that is at the last position
         # is the first in the list. This way we can edit the string in
         # place and only rebuild the tree after all the edits have been
         # made.
 
+        captures = sorted(query.captures(tree.root_node))
+        captures.reverse()
+
         newline_offsets = Helpers.get_all_newline_offsets(data)
-        # print(newline_offsets, len(data))
 
         for match in captures:
-            print(match)
+            match_type = match[1]
             line = match[0].start_point[0]
             offset = match[0].start_point[1]
-            start_char = newline_offsets[line] + offset
-            match_type = match[1]
+            matched_char_loc = newline_offsets[line] + offset
 
-            # print(line, offset, data[start_char])
             if match_type == "no_space_left":
-                char = data[start_char + 1]
-                # print("no_space_left [", char, "]")
-                if char == " ":
-                    data = Helpers.replace_range(
-                        data, start_char + 1, start_char + 2, ""
+                location_to_check = matched_char_loc + 1
+                char_to_check = data[location_to_check]
+                if char_to_check == " ":
+                    data = (
+                        data[: (matched_char_loc + 1)]
+                        + data[(location_to_check + 1) :]
                     )
             elif match_type == "no_space_right":
-                char = data[start_char - 1]
-                # print("no_space_right[", char, "]")
-                if char == " ":
-                    data = Helpers.replace_range(
-                        data, start_char - 1, start_char, ""
+                location_to_check = matched_char_loc - 1
+                char_to_check = data[location_to_check]
+                if char_to_check == " ":
+                    data = data[:location_to_check] + data[matched_char_loc:]
+
+            elif match_type == "space_left":
+                location_to_check = matched_char_loc + 1
+                char_to_check = data[location_to_check]
+                if char_to_check != " ":
+                    data = (
+                        data[:location_to_check]
+                        + " "
+                        + data[(matched_char_loc + 1) :]
                     )
 
-        ##################
-        #     # print(newline_offsets[match[0].start_point[0]])
-        #     # if match[1] == "collection":
-        #     #     tree = Helpers.get_tree(parser, data, tree)
-
-        #     # start_point = match[0].start_point
-        #     # # start_offset = Helpers.position_offset(
-        #     # #    data, start_point[0], start_point[1]
-        #     # # )
-        #     # end_point = match[0].end_point
-        #     # # end_offset = Helpers.position_offset(
-        #     # #    data, end_point[0], end_point[1]
-        #     # # )
-        #     # print(
-        #     #     "Match:",
-        #     #     match[1],
-        #     #     start_point,
-        #     #     end_point,
-        #     #     # Helpers.position_offset(data, start_point[0], start_point[1]),
-        #     #     # Helpers.position_offset(data, end_point[0], end_point[1]),
-        #     # )
-
-        # #     # If no space right and the character before the
-        # #     # 'no space' is a space, replace the space.
-
-        # #     # If no space left and the character after the
-        # #     # 'no space' is a space, replace the space.
-
-        # #     # If space left and the character after the
-        # #     # 'space' is not a space, insert a space
-
-        # #     # If space right and the character before the
-        # #     # 'space' is not a space, insert a space
+            elif match_type == "space_right":
+                location_to_check = matched_char_loc - 1
+                char_to_check = data[location_to_check]
+                if char_to_check != " ":
+                    data = (
+                        data[: (location_to_check) + 1]
+                        + " "
+                        + data[matched_char_loc:]
+                    )
 
         return data, tree
 
