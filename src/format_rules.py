@@ -26,6 +26,21 @@ class FormatRule(object):
 
 class Helpers(object):
     @staticmethod
+    def get_query_result_and_newline_data(tree, query, data):
+
+        # Sort the results so that the match that is at the last position
+        # is the first in the list. This way we can edit the string in
+        # place and only rebuild the tree after all the edits have been
+        # made.
+
+        captures = sorted(query.captures(tree.root_node))
+        captures.reverse()
+
+        newline_offsets = Helpers.get_all_newline_offsets(data)
+
+        return captures, newline_offsets
+
+    @staticmethod
     def get_all_newline_offsets(data):
         # Use the positive lookbehind technique to match
         # the character after the newline. The [0] is in place, as the 0th
@@ -172,6 +187,66 @@ class StripTrailingWhitespace(FormatRule):
 class BinaryOperatorSpacing(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+
+        query = language.query(
+            """
+           (binary_expression) @binary_exp
+           """
+        )
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        # A binary expression will always have three parts
+        # - A prefix
+        # - The binary operator
+        # - The suffix
+        # The binary operator itself is the second element
+        # in the binary expression child array.
+        #
+        # We'll pull that out of the match array and then
+        # resort.
+
+        operators = []
+
+        for match in captures:
+            operators.append(match[0].children[1])
+
+        operators = sorted(
+            operators,
+            key=lambda operator: [operator.start_point, operator.end_point],
+            reverse=True,
+        )
+
+        for operator in operators:
+
+            start_line = operator.start_point[0]
+            start_offset = operator.start_point[1]
+            end_line = operator.end_point[0]
+            end_offset = operator.end_point[1]
+            start_matched_char_loc = newline_offsets[start_line] + start_offset
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+            operator = data[start_matched_char_loc:end_matched_char_loc]
+
+            # Handle the right side
+            if data[end_matched_char_loc] != " ":
+                data = (
+                    data[:start_matched_char_loc]
+                    + operator
+                    + " "
+                    + data[end_matched_char_loc:]
+                )
+
+            # Handle the left side
+            if data[start_matched_char_loc - 1] != " ":
+                data = (
+                    data[:start_matched_char_loc]
+                    + " "
+                    + operator
+                    + data[end_matched_char_loc:]
+                )
+
         return data, tree
 
 
@@ -239,15 +314,9 @@ class BracketSpacing(FormatRule):
            """
         )
 
-        # Sort the results so that the match that is at the last position
-        # is the first in the list. This way we can edit the string in
-        # place and only rebuild the tree after all the edits have been
-        # made.
-
-        captures = sorted(query.captures(tree.root_node))
-        captures.reverse()
-
-        newline_offsets = Helpers.get_all_newline_offsets(data)
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
 
         for match in captures:
             match_type = match[1]
