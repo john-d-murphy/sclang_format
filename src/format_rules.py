@@ -222,6 +222,12 @@ class BracketSpacing(FormatRule):
         # NB: The treesitter will not parse a parameter list with spaces,
         # so adding (parameter_list ("|") ("|")) @no_space to the query
         # is moot.
+        #
+        # This is a known issue:
+        # https://github.com/madskjeldgaard/tree-sitter-supercollider/issues/42
+        #
+        # When the issue is resolved, it's a TODO to add the query for the parameter
+        # list and the appropriate handling logic back in.
         query = language.query(
             """
            ("(") @no_space_left
