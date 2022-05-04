@@ -33,6 +33,8 @@ class Helpers(object):
         # place and only rebuild the tree after all the edits have been
         # made.
 
+        # TODO: why doesn't this return properly all the time ?
+
         captures = sorted(query.captures(tree.root_node))
         captures.reverse()
 
@@ -134,10 +136,13 @@ class Helpers(object):
 class NormalizeText(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
-        # Normalizing will remove all leading whitespace
-        # and collapse multiple spaces into one.
-        data = data.lstrip()
+        # Normalizing will convert tabs to spaces, remove all leading whitespace,
+        # collapse multiple spaces into one, remove starting spaces and
+        # remove all empty lines.
+        data = re.sub("\t", " ", data)
         data = re.sub(" +", " ", data)
+        data = re.sub(r"^$\n", "", data, flags=re.MULTILINE)
+        data = data.lstrip()
         return data, tree
 
 
@@ -255,7 +260,34 @@ class BinaryOperatorSpacing(FormatRule):
 class AddSpacesAfterCommas(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
-        data = re.sub(" ,", ",", data)
+
+        query = language.query(
+            """
+           (",") @comma
+           """
+        )
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for comma in captures:
+            line = comma[0].start_point[0]
+            offset = comma[0].start_point[1]
+            matched_char_loc = newline_offsets[line] + offset
+
+            # Handle the right side
+            if data[matched_char_loc + 1] != " ":
+                data = (
+                    data[: (matched_char_loc + 1)]
+                    + " "
+                    + data[(matched_char_loc + 1) :]
+                )
+
+            # Handle the left side
+            if data[matched_char_loc - 1] == " ":
+                data = data[: (matched_char_loc - 1)] + data[matched_char_loc:]
+
         return data, tree
 
 

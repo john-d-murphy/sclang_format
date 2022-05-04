@@ -27,6 +27,7 @@ inline_format = [
     fr.BracketSpacing,
     fr.DontUseSpaceBeforeSemicolons,
     fr.BinaryOperatorSpacing,
+    fr.AddSpacesAfterCommas,
 ]
 post_format = [fr.NoMoreThan80Characters, fr.EndOfFileNewLine]
 
