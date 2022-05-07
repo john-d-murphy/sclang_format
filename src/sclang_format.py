@@ -21,6 +21,8 @@ log.setLevel(logging.DEBUG)
 
 #### Constants
 
+STD_IN = "-"
+
 # List Of Format Rule Classes
 pre_format = [fr.StripTrailingWhitespace(), fr.NormalizeText()]
 inline_format = [
@@ -48,11 +50,11 @@ def main():
     ### Parse and display arguments
     arguments = parse_arguments()
 
+    ### Read the passed file or from stdin
+    data = read_file(arguments)
+
     ### Get the treesitter language object
     language, parser = get_treesitter_parser(arguments)
-
-    ### Read the passed file
-    data = read_file(arguments)
 
     ### Get the tree
     tree = fr.Helpers.get_tree(parser, data, None)
@@ -101,7 +103,8 @@ def parse_arguments():
         "-f",
         "--supercollider_file",
         help="Absolute path of the file to parse",
-        required=True,
+        default=STD_IN,
+        required=False,
     )
     parser.add_argument(
         "-l",
@@ -171,8 +174,12 @@ def read_file(arguments):
     file_lines: File parsed into an array of lines
     """
 
-    with open(arguments.supercollider_file, "r", encoding="utf8") as file:
-        data = file.read()
+    if arguments.supercollider_file == STD_IN:
+        with sys.stdin as file:
+            data = file.read()
+    else:
+        with open(arguments.supercollider_file, "r", encoding="utf8") as file:
+            data = file.read()
 
     return data
 
