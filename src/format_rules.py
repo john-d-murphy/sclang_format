@@ -123,6 +123,11 @@ class Helpers(object):
 #### Format Rules
 # Most Taken from:
 # https://github.com/supercollider/supercollider/wiki/Code-style-guidelines
+#
+# And Indentation Rules taken from:
+# https://github.com/supercollider/supercollider/blob/develop/editors/sc-ide/widgets/code_editor/sc_editor.cpp#L597
+# and
+# https://github.com/supercollider/supercollider/blob/develop/lang/LangSource/DumpParseNode.cpp
 
 # The basic loop of a formatter is to:
 #   1) Find the places in the tree, parser where the data needs to be modified.
@@ -143,6 +148,37 @@ class NormalizeText(FormatRule):
         data = re.sub(" +", " ", data)
         data = re.sub(r"^$\n", "", data, flags=re.MULTILINE)
         data = data.lstrip()
+        return data, tree
+
+
+# Apply magic sigils - syntax sugar to help the formatter
+class ApplyMagicSigils(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+        # Check if any lists end in "," if so, separate out the list entries
+        # onto a new line.
+        return data, tree
+
+
+# Apply indentation to code
+class ApplyIndentation(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+        return data, tree
+
+
+# Separate Elements onto new lines that need to be separated
+class SeparateElementsOntoNewLines(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+        return data, tree
+
+
+# Format comments to leave two spaces in front of the line and not
+# allow them to be longer than the 80 character limit
+class FormatComments(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
         return data, tree
 
 
