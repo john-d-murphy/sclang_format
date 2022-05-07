@@ -487,6 +487,11 @@ class UseKRStyle(FormatRule):
 class FormatDotNotation(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        # Find Dots:
+        #   If the dot is the start of the line (e.g. prefaced by tabs)
+        #   then only make sure there is no space after.
+        #   If the dot is not at the start of the line, make sure there
+        #   is no space on either side.
         return data, tree
 
 
@@ -518,6 +523,10 @@ class FormatDotNotation(FormatRule):
 class FormatParameterLists(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        # Check to see if "arg" exists - if it does, remove it.
+        # Check to see if the list has a ";" at the end - if it does, remove it.
+        # Check to see if the pipe exists at the boundaries. If it doesn't, add.
+        # Check to see if commas exist between the elements. If they don't, add.
         return data, tree
 
 
@@ -540,6 +549,9 @@ class FormatParameterLists(FormatRule):
 class ParameterListAlignment(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        # Check to see if element list is on a different line than the
+        # function bracket. If it is, remove the newline and ensure a
+        # newline is after the last element.
         return data, tree
 
 
@@ -575,6 +587,9 @@ class ParameterListAlignment(FormatRule):
 class FormatReturnStatement(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        # Add a newline and remove the semicolon before the last element
+        # in the function. If needed, mark with "//return" - let's see
+        # how this looks in practice.
         return data, tree
 
 
@@ -593,6 +608,8 @@ class FormatReturnStatement(FormatRule):
 class FormatMultieLineArray(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        # Ensure that any array that has newlines has a newline between
+        # each element and the indendation is one level in from its parent.
         return data, tree
 
 
@@ -603,11 +620,12 @@ class FormatMultieLineArray(FormatRule):
 # whenever possible. Especially in control-flow
 # methods like do, if, for, case, switch, and while:
 #
+# // right
+# if(c) { "true".postln } { "false".postln };
+#
 # // wrong
 # if(c, { "true".postln }, { "false".postln });
 #
-# // right
-# if(c) { "true".postln } { "false".postln };
 class UseTrailingClosureSyntax(FormatRule):
     @staticmethod
     def format(arguments, data, tree, parser, language):
