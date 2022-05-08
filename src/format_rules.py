@@ -327,6 +327,45 @@ class AddSpacesAfterCommas(FormatRule):
         return data, tree
 
 
+# Rule: Add spaces around assignment.
+# Assignments should have one space after and before.
+class AddSpacesAroundAssignment(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+
+        # for node in Helpers.traverse_tree(tree):
+        #    print(node)
+
+        query = language.query(
+            """
+           ("=") @assignment
+           """
+        )
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for assignment in captures:
+            line = assignment[0].start_point[0]
+            offset = assignment[0].start_point[1]
+            matched_char_loc = newline_offsets[line] + offset
+
+            # Handle the right side
+            if data[matched_char_loc + 1] != " ":
+                data = (
+                    data[: (matched_char_loc + 1)]
+                    + " "
+                    + data[(matched_char_loc + 1) :]
+                )
+
+            # Handle the left side
+            if data[matched_char_loc - 1] != " ":
+                data = data[:matched_char_loc] + " " + data[matched_char_loc:]
+
+        return data, tree
+
+
 # Rule: Don't use spaces before semicolons.
 # Semicolons should immediately follow the end of the statement,
 # with no additional space.
@@ -523,10 +562,40 @@ class FormatDotNotation(FormatRule):
 class FormatParameterLists(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
-        # Check to see if "arg" exists - if it does, remove it.
-        # Check to see if the list has a ";" at the end - if it does, remove it.
-        # Check to see if the pipe exists at the boundaries. If it doesn't, add.
-        # Check to see if commas exist between the elements. If they don't, add.
+        query = language.query(
+            """
+           (parameter_list) @parameter_list
+           """
+        )
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        # NB: Spaces around "=" signs will be handled in another format rule.
+        for match in captures:
+            start_line = match[0].start_point[0]
+            start_offset = match[0].start_point[1]
+            matched_char_loc = newline_offsets[start_line] + start_offset
+            end_line = match[0].end_point[0]
+            end_offset = match[0].end_point[1]
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+            argument_list = data[matched_char_loc:end_matched_char_loc]
+
+            # Reformat beginning and end of argument list with pipes
+            argument_list = re.sub("^arg |;$", "|", argument_list)
+
+            # If space exists but is not preceded by a comma, replace
+            # with ", ". See 'Important Notes about Lookbehind' at
+            # https://www.regular-expressions.info/lookaround.html
+            argument_list = re.sub("(?<!,) ", ", ", argument_list)
+
+            # Splice New Argument List Into Data
+            data = (
+                data[:matched_char_loc]
+                + argument_list
+                + data[end_matched_char_loc:]
+            )
+
         return data, tree
 
 
