@@ -333,9 +333,6 @@ class AddSpacesAroundAssignment(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
 
-        # for node in Helpers.traverse_tree(tree):
-        #    print(node)
-
         query = language.query(
             """
            ("=") @assignment
@@ -656,9 +653,57 @@ class ParameterListAlignment(FormatRule):
 class FormatReturnStatement(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
-        # Add a newline and remove the semicolon before the last element
-        # in the function. If needed, mark with "//return" - let's see
-        # how this looks in practice.
+
+        query = language.query(
+            """
+          (function_block) @function_block
+          """
+        )
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for match in captures:
+
+            # Find the last statement - either a return statement or some
+            # sort of expression. This is going to be the return statement.
+            # The last statement is the statment that's neither a semicolon
+            # nor a closing bracket.
+
+            semicolon_found = False
+            for child in reversed(match[0].children):
+                if child.type == ";":
+                    semicolon_found = True
+                if child.type != "}" and child.type != ";":
+                    return_statement = child
+                    break
+
+            start_line = return_statement.start_point[0]
+            start_offset = return_statement.start_point[1]
+            matched_char_loc = newline_offsets[start_line] + start_offset
+            end_line = return_statement.end_point[0]
+            end_offset = return_statement.end_point[1]
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+            return_statement_text = data[matched_char_loc:end_matched_char_loc]
+
+            # Remove semicolon at end of statement to further distinguish return
+            return_statement_text = re.sub(";", "", return_statement_text)
+
+            # Splice Return Statement Into Data
+            if not semicolon_found:
+                data = (
+                    data[:matched_char_loc]
+                    + return_statement_text
+                    + data[end_matched_char_loc:]
+                )
+            else:
+                data = (
+                    data[:matched_char_loc]
+                    + return_statement_text
+                    + data[end_matched_char_loc + 1 :]
+                )
+
         return data, tree
 
 
