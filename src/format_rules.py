@@ -188,6 +188,7 @@ class JoinElementsOntoSingleLines(FormatRule):
            ("[") @no_newline_both
            ("]") @no_newline_to_left
            (".") @no_newline_both
+           ("|") @no_newline_both
            ("{") @no_newline_to_right
            ("}") @no_newline_to_left
            ("(") @no_newline_to_right
@@ -709,6 +710,34 @@ class ParameterListAlignment(FormatRule):
         # Check to see if element list is on a different line than the
         # function bracket. If it is, remove the newline and ensure a
         # newline is after the last element.
+
+        query = language.query(
+            """
+           (parameter_list) @parameter_list
+           """
+        )
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for match in captures:
+            start_line = match[0].start_point[0]
+            start_offset = match[0].start_point[1]
+            matched_char_loc = newline_offsets[start_line] + start_offset
+            end_line = match[0].end_point[0]
+            end_offset = match[0].end_point[1]
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+            argument_list = data[matched_char_loc:end_matched_char_loc]
+            char_to_check = data[end_matched_char_loc]
+
+            if char_to_check != " ":
+                data = (
+                    data[:matched_char_loc]
+                    + argument_list
+                    + " "
+                    + data[end_matched_char_loc:]
+                )
+
         return data, tree
 
 
