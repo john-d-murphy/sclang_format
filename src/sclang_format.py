@@ -9,6 +9,7 @@ coding conventions.
 import argparse
 import logging
 import format_rules as fr
+import re
 import sys
 
 from tree_sitter import Language, Parser, Tree
@@ -24,14 +25,25 @@ log.setLevel(logging.DEBUG)
 STD_IN = "-"
 
 # List Of Format Rule Classes
-pre_format = [fr.StripTrailingWhitespace(), fr.NormalizeText()]
+pre_format = [
+    fr.NoMoreThan80Characters,
+    fr.StripTrailingWhitespace,
+    fr.JoinElementsOntoSingleLines,
+    # This is currently handled by the "remove spaces" method.
+    # This needs to be reactivated when the linked bug in the
+    # tree-sitter is fixed.
+    # fr.NormalizeText,
+]
 inline_format = [
+    fr.FormatParameterLists,
     fr.BracketSpacing,
     fr.DontUseSpaceBeforeSemicolons,
+    fr.AddSpacesAroundAssignment,
     fr.BinaryOperatorSpacing,
     fr.AddSpacesAfterCommas,
+    fr.FormatReturnStatement,
 ]
-post_format = [fr.NoMoreThan80Characters, fr.EndOfFileNewLine]
+post_format = [fr.EndOfFileNewLine]
 
 ### Main
 
@@ -47,11 +59,17 @@ def main():
         * Parses the tree
         * Prints out the result
     """
+
     ### Parse and display arguments
     arguments = parse_arguments()
 
     ### Read the passed file or from stdin
     data = read_file(arguments)
+
+    ### Ensure that there are no spaces around "=" operators.
+    ### This is to handle this bug:
+    ### https://github.com/madskjeldgaard/tree-sitter-supercollider/issues/42
+    data = naive_normalize(data)
 
     ### Get the treesitter language object
     language, parser = get_treesitter_parser(arguments)
@@ -66,7 +84,7 @@ def main():
     # If there is an error in the parsing, return with
     # error code.
     if len(captures) > 0:
-        print("UNPARSABLE")
+        print_unparsable_sections(arguments, data, captures)
         sys.exit(1)
 
     ### Run the pre-formatters
@@ -182,6 +200,60 @@ def read_file(arguments):
             data = file.read()
 
     return data
+
+
+def naive_normalize(data):
+    # Do some of the normalization here as well.
+    # This method needs to be removed once the parsing bug is fixed.
+    data = re.sub("\t", " ", data)
+    data = re.sub(" +", " ", data)
+    # Replace two or more newlines with two newlines
+    data = re.sub(r"\n[\n]+", "\n\n", data)
+    data = re.sub(r"\n ", "\n", data)
+    # data = re.sub(r"^$\n", "", data, flags=re.MULTILINE)
+
+    # Remove spaces around assignments to allow for parsing and address
+    # the bug in the argument list.
+    data = re.sub("= ", "=", data)
+    data = re.sub(" =", "=", data)
+
+    # Remove spaces around pipes to allow for parsing and address
+    # the bug in the argument list. We currently don't have any
+    # semantics here, so we can't say to only remove the spaces
+    # within the argument list.
+    data = re.sub("\| ", "|", data)
+    data = re.sub(" \|", "|", data)
+
+    # Strip is not removing the whitespace after the open brace.
+    # Not sure why this is - this is a hack to clean this up.
+    data = re.sub("{ ", "{", data)
+
+    # Remove all whitespaces
+    data = data.strip()
+
+    return data
+
+
+def print_unparsable_sections(arguments, data, errors):
+    newline_offsets = fr.Helpers.get_all_newline_offsets(data)
+    for error in errors:
+        start_line = error[0].start_point[0]
+        start_offset = error[0].start_point[1]
+        end_line = error[0].end_point[0]
+        end_offset = error[0].end_point[1]
+        start_matched_char_loc = newline_offsets[start_line] + start_offset
+        end_matched_char_loc = newline_offsets[end_line] + end_offset
+        bad_data = data[start_matched_char_loc:end_matched_char_loc]
+
+        print(
+            "Error: "
+            + str(start_line)
+            + ":"
+            + str(start_offset)
+            + " - ["
+            + bad_data
+            + "]"
+        )
 
 
 if __name__ == "__main__":

@@ -45,9 +45,13 @@ class Helpers(object):
     @staticmethod
     def get_all_newline_offsets(data):
         # Use the positive lookbehind technique to match
-        # the character after the newline. The [0] is in place, as the 0th
+        # the character after the newline. (.|\n) means either a character
+        # or a newline, as it's possible to have multiple newlines in a row
+        # and we want to account for that. The [0] means the 0th
         # character is always the start of the first line.
-        return [0] + [match.start() for match in re.finditer("(?<=\n).", data)]
+        return [0] + [
+            match.start() for match in re.finditer("(?<=\n)(.|\n)", data)
+        ]
 
     @staticmethod
     def position_offset(data, line, offset):
@@ -119,6 +123,11 @@ class Helpers(object):
                 if cursor.goto_next_sibling():
                     retracing = False
 
+    @staticmethod
+    def print_tree(tree: Tree):
+        for node in Helpers.traverse_tree(tree):
+            print(node)
+
 
 #### Format Rules
 # Most Taken from:
@@ -148,6 +157,7 @@ class NormalizeText(FormatRule):
         data = re.sub(" +", " ", data)
         data = re.sub(r"^$\n", "", data, flags=re.MULTILINE)
         data = data.lstrip()
+
         return data, tree
 
 
@@ -164,6 +174,87 @@ class ApplyMagicSigils(FormatRule):
 class ApplyIndentation(FormatRule):
     @staticmethod
     def _FormatRule__format(arguments, data, tree, parser, language):
+        return data, tree
+
+
+# As first pass, join statements that we are unsure of requiring multiple lines.
+# Once we space everything out, we'll do a final pass to do spacing and indentation.
+class JoinElementsOntoSingleLines(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+
+        query = language.query(
+            """
+           ("[") @no_newline_both
+           ("]") @no_newline_to_left
+           (".") @no_newline_both
+           ("{") @no_newline_to_right
+           ("}") @no_newline_to_left
+           ("(") @no_newline_to_right
+           (")") @no_newline_to_left
+           """
+        )
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for match in captures:
+            match_type = match[1]
+            line = match[0].start_point[0]
+            offset = match[0].start_point[1]
+            matched_char_loc = newline_offsets[line] + offset
+            # print(data[matched_char_loc])
+
+            # Skip the last char
+            if matched_char_loc + 1 >= len(data):
+                continue
+
+            # Handle Newlines to the left
+            if (
+                match_type == "no_newline_to_left"
+                or match_type == "no_newline_both"
+            ):
+                location_to_check = matched_char_loc - 1
+                char_to_check = data[location_to_check]
+                if char_to_check == "\n":
+                    data = data[:location_to_check] + data[matched_char_loc:]
+                    location_to_check = location_to_check - 1
+                    char_to_check = data[location_to_check]
+                    # Edge case - we allow two newlines in a row between blocks,
+                    # and normalization doesn't know that this isn't a block, so
+                    # we need to reformat this again.
+                    # TODO: This logic should be cleaned up, it's kinda gnarly.
+                    if char_to_check == "\n":
+                        data = (
+                            data[:location_to_check]
+                            + data[(matched_char_loc - 1) :]
+                        )
+
+            # Handle Newlines to the right
+            if (
+                match_type == "no_newline_to_right"
+                or match_type == "no_newline_both"
+            ):
+                location_to_check = matched_char_loc + 1
+                char_to_check = data[location_to_check]
+                if char_to_check == "\n":
+                    data = (
+                        data[:location_to_check]
+                        + data[(location_to_check + 1) :]
+                    )
+                    # Edge case - we allow two newlines in a row between blocks,
+                    # and normalization doesn't know that this isn't a block, so
+                    # we need to reformat this again.
+                    # TODO: This logic should be cleaned up, it's kinda gnarly.
+                    location_to_check = matched_char_loc + 1
+                    char_to_check = data[location_to_check]
+                    if char_to_check == "\n":
+                        data = (
+                            data[:location_to_check]
+                            + data[(location_to_check + 1) :]
+                        )
+
         return data, tree
 
 
@@ -409,12 +500,12 @@ class BracketSpacing(FormatRule):
         # list and the appropriate handling logic back in.
         query = language.query(
             """
-           ("(") @no_space_left
-           (")") @no_space_right
-           ("[") @no_space_left
-           ("]") @no_space_right
-           ("{") @space_left
-           ("}") @space_right
+           ("(") @no_space_opening
+           (")") @no_space_closing
+           ("[") @no_space_opening
+           ("]") @no_space_closing
+           ("{") @space_opening
+           ("}") @space_closing
            """
         )
 
@@ -428,7 +519,7 @@ class BracketSpacing(FormatRule):
             offset = match[0].start_point[1]
             matched_char_loc = newline_offsets[line] + offset
 
-            if match_type == "no_space_left":
+            if match_type == "no_space_opening":
                 location_to_check = matched_char_loc + 1
                 char_to_check = data[location_to_check]
                 if char_to_check == " ":
@@ -436,13 +527,13 @@ class BracketSpacing(FormatRule):
                         data[: (matched_char_loc + 1)]
                         + data[(location_to_check + 1) :]
                     )
-            elif match_type == "no_space_right":
+            elif match_type == "no_space_closing":
                 location_to_check = matched_char_loc - 1
                 char_to_check = data[location_to_check]
                 if char_to_check == " ":
                     data = data[:location_to_check] + data[matched_char_loc:]
 
-            elif match_type == "space_left":
+            elif match_type == "space_opening":
                 location_to_check = matched_char_loc + 1
                 char_to_check = data[location_to_check]
                 if char_to_check != " ":
@@ -452,7 +543,7 @@ class BracketSpacing(FormatRule):
                         + data[(matched_char_loc + 1) :]
                     )
 
-            elif match_type == "space_right":
+            elif match_type == "space_closing":
                 location_to_check = matched_char_loc - 1
                 char_to_check = data[location_to_check]
                 if char_to_check != " ":
