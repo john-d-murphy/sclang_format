@@ -101,6 +101,39 @@ class Helpers(object):
             return parser.parse(bytes(data, "utf8"), tree)
 
     @staticmethod
+    def traverse_code_blocks(tree: Tree):
+        cursor = tree.walk()
+
+        reached_root = False
+        level = 0
+        while reached_root == False:
+            if cursor.node.type == "code_block":
+                yield cursor.node, level
+
+            if cursor.goto_first_child():
+                if cursor.node.type == "code_block":
+                    level = level + 1
+                continue
+
+            if cursor.goto_next_sibling():
+                if cursor.node.type == "code_block":
+                    level = level + 1
+                continue
+
+            retracing = True
+            while retracing:
+                if cursor.node.type == "code_block":
+                    level = level - 1
+                if not cursor.goto_parent():
+                    if cursor.node.type == "code_block":
+                        level = level - 1
+                    retracing = False
+                    reached_root = True
+
+                if cursor.goto_next_sibling():
+                    retracing = False
+
+    @staticmethod
     def traverse_tree(tree: Tree):
         cursor = tree.walk()
 
@@ -125,8 +158,11 @@ class Helpers(object):
 
     @staticmethod
     def print_tree(tree: Tree):
+        TAB = "  "
         for node in Helpers.traverse_tree(tree):
-            print(node)
+            #    print(TAB * level + str(node) + str(node.type))
+            print(str(node.text.decode() + " - " + str(node.type)))
+        #    print("####################")
 
 
 #### Format Rules
@@ -137,7 +173,9 @@ class Helpers(object):
 # https://github.com/supercollider/supercollider/blob/develop/editors/sc-ide/widgets/code_editor/sc_editor.cpp#L597
 # and
 # https://github.com/supercollider/supercollider/blob/develop/lang/LangSource/DumpParseNode.cpp
-
+# and
+# https://git.sr.ht/~sircmpwn/cstyle
+#
 # The basic loop of a formatter is to:
 #   1) Find the places in the tree, parser where the data needs to be modified.
 #      Start from the end so we can modify the data in place.
@@ -864,3 +902,47 @@ class UseTrailingClosureSyntax(FormatRule):
     @staticmethod
     def format(arguments, data, tree, parser, language):
         return data, tree
+
+
+## Indentation
+
+# Apply indentation and formatting rules to the code tree.
+# Rules:
+#  From Drew DeVault:
+#  * Programmers SHOULD NOT split lines which are less than 80 columns
+#  * Programmers MUST double-indent continuation lines for new scopes
+#    (i.e. argument/parameter lists)
+class IndentFile(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+
+        # Get newline data for the tree.
+        newline_offsets = Helpers.get_all_newline_offsets(data)
+
+        # Get all of the code blocks within the tree.
+        for node, level in Helpers.traverse_code_blocks(tree):
+            start_line = node.start_point[0]
+            start_offset = node.start_point[1]
+            end_line = node.end_point[0]
+            end_offset = node.end_point[1]
+            start_matched_char_loc = newline_offsets[start_line] + start_offset
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+
+            print(node)
+            print(node.parent)
+            print("Length: ", end_matched_char_loc - start_matched_char_loc)
+            print("#############")
+            pass
+            # Check to see what level this code block is on.
+            # bound_with_parens = False
+            # code_block
+            # if node.type == "code_block" and level == 1:
+            #    # If the code block is level 1 and over 80 characters long,
+            #    # we are going to bound it by parens. As always, we need to
+            #    # handle this backwards, so we are only going to append after
+            #    # we are done processing the code block.
+
+        return data, tree
+
+    def process_code_block(data, level, code_block):
+        pass

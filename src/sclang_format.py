@@ -42,8 +42,9 @@ inline_format = [
     fr.BinaryOperatorSpacing,
     fr.AddSpacesAfterCommas,
     fr.FormatReturnStatement,
+    fr.ParameterListAlignment,
 ]
-post_format = [fr.EndOfFileNewLine]
+post_format = [fr.IndentFile, fr.EndOfFileNewLine]
 
 ### Main
 
@@ -66,8 +67,7 @@ def main():
     ### Read the passed file or from stdin
     data = read_file(arguments)
 
-    ### Ensure that there are no spaces around "=" operators.
-    ### This is to handle this bug:
+    ### Naive normalization to accomidate this bug:
     ### https://github.com/madskjeldgaard/tree-sitter-supercollider/issues/42
     data = naive_normalize(data)
 
@@ -207,10 +207,16 @@ def naive_normalize(data):
     # This method needs to be removed once the parsing bug is fixed.
     data = re.sub("\t", " ", data)
     data = re.sub(" +", " ", data)
-    # Replace two or more newlines with two newlines
+
+    # Replace two or more newlines with two newlines. This is to allow
+    # separation between logical blocks, but not allow an excess of
+    # whitespace, similar to how black does it.
     data = re.sub(r"\n[\n]+", "\n\n", data)
+
+    # Don't allow whitespace to follow a newline. Stripping seems to not
+    # work for some of these use cases, so this takes care of that
+    # manually.
     data = re.sub(r"\n ", "\n", data)
-    # data = re.sub(r"^$\n", "", data, flags=re.MULTILINE)
 
     # Remove spaces around assignments to allow for parsing and address
     # the bug in the argument list.
@@ -227,6 +233,10 @@ def naive_normalize(data):
     # Strip is not removing the whitespace after the open brace.
     # Not sure why this is - this is a hack to clean this up.
     data = re.sub("{ ", "{", data)
+
+    # If 'play' at end of line with no semicolon, add semicolon
+    # after play. Tree won't parse without it.
+    data = re.sub("play\n", "play;\n", data)
 
     # Remove all whitespaces
     data = data.strip()
