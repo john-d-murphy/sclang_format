@@ -101,31 +101,59 @@ class Helpers(object):
             return parser.parse(bytes(data, "utf8"), tree)
 
     @staticmethod
-    def traverse_code_blocks(tree: Tree):
+    def get_significant_tree_nodes(newline_offsets, tree: Tree):
         cursor = tree.walk()
+
+        nodes_to_investigate = [
+            "code_block",
+            "variable_definition",
+            "function_block",
+        ]
 
         reached_root = False
         level = 0
+        parents = []
+        end_of_block = []
         while reached_root == False:
-            if cursor.node.type == "code_block":
-                yield cursor.node, level
+
+            if cursor.node.type in nodes_to_investigate:
+                yield cursor.node, level, parents
 
             if cursor.goto_first_child():
-                if cursor.node.type == "code_block":
+                if cursor.node.type in nodes_to_investigate:
+                    print(
+                        "APPENDING %d",
+                        Helpers.get_length_of_node(
+                            cursor.node, newline_offsets
+                        ),
+                    )
                     level = level + 1
+                    parents.append(cursor.node)
                 continue
 
             if cursor.goto_next_sibling():
-                if cursor.node.type == "code_block":
+                if cursor.node.type in nodes_to_investigate:
+                    parents.append(cursor.node)
+                    print(
+                        "APPENDING %d",
+                        Helpers.get_length_of_node(
+                            cursor.node, newline_offsets
+                        ),
+                    )
                     level = level + 1
                 continue
 
             retracing = True
             while retracing:
-                if cursor.node.type == "code_block":
+                print("RETRACING", cursor.node.type)
+                if cursor.node.type in nodes_to_investigate:
+                    print("DECREMENTING", cursor.node.type)
+                    parents.pop()
                     level = level - 1
                 if not cursor.goto_parent():
-                    if cursor.node.type == "code_block":
+                    if cursor.node.type in nodes_to_investigate:
+                        print("DECREMENTING", cursor.node.type)
+                        parents.pop()
                         level = level - 1
                     retracing = False
                     reached_root = True
@@ -163,6 +191,33 @@ class Helpers(object):
             #    print(TAB * level + str(node) + str(node.type))
             print(str(node.text.decode() + " - " + str(node.type)))
         #    print("####################")
+
+    @staticmethod
+    def get_start_of_node(node, newline_offsets):
+        start_line = node.start_point[0]
+        start_offset = node.start_point[1]
+        start_matched_char_loc = newline_offsets[start_line] + start_offset
+
+        return start_matched_char_loc
+
+    @staticmethod
+    def get_end_of_node(node, newline_offsets):
+        end_line = node.end_point[0]
+        end_offset = node.end_point[1]
+        end_matched_char_loc = newline_offsets[end_line] + end_offset
+
+        return end_matched_char_loc
+
+    @staticmethod
+    def get_length_of_node(node, newline_offsets):
+        start_line = node.start_point[0]
+        start_offset = node.start_point[1]
+        end_line = node.end_point[0]
+        end_offset = node.end_point[1]
+        start_matched_char_loc = newline_offsets[start_line] + start_offset
+        end_matched_char_loc = newline_offsets[end_line] + end_offset
+
+        return end_matched_char_loc - start_matched_char_loc
 
 
 #### Format Rules
@@ -919,8 +974,16 @@ class IndentFile(FormatRule):
         # Get newline data for the tree.
         newline_offsets = Helpers.get_all_newline_offsets(data)
 
+        # Helpers.print_tree(tree)
+
+        # Top level = everything in the tree where the parent is
+        # "source_file". Basically anything can be in here.
+
         # Get all of the code blocks within the tree.
-        for node, level in Helpers.traverse_code_blocks(tree):
+        # top_level_nodes = Helpers.get_significant_tree_nodes(tree)
+        for node, level, parents in Helpers.get_significant_tree_nodes(
+            newline_offsets, tree
+        ):
             start_line = node.start_point[0]
             start_offset = node.start_point[1]
             end_line = node.end_point[0]
@@ -928,20 +991,36 @@ class IndentFile(FormatRule):
             start_matched_char_loc = newline_offsets[start_line] + start_offset
             end_matched_char_loc = newline_offsets[end_line] + end_offset
 
-            print(node)
-            print(node.parent)
-            print("Length: ", end_matched_char_loc - start_matched_char_loc)
-            print("#############")
-            pass
-            # Check to see what level this code block is on.
-            # bound_with_parens = False
-            # code_block
-            # if node.type == "code_block" and level == 1:
-            #    # If the code block is level 1 and over 80 characters long,
-            #    # we are going to bound it by parens. As always, we need to
-            #    # handle this backwards, so we are only going to append after
-            #    # we are done processing the code block.
+            print(
+                "%-20s - Parents: %d - Length: %4d - Text: %s"
+                % (
+                    node.type,
+                    len(parents),
+                    end_matched_char_loc - start_matched_char_loc,
+                    node.text,
+                ),
+            )
 
+            # if start_offset == 0:
+            #    print(node)
+            #    print(
+            #        "Length: ",
+            #        end_matched_char_loc - start_matched_char_loc,
+            #        "Level: ",
+            #        level,
+            #    )
+            #    print(data[start_matched_char_loc:end_matched_char_loc])
+            #    print("#############")
+        #     # Check to see what level this code block is on.
+        #     # bound_with_parens = False
+        #     # code_block
+        #     # if node.type == "code_block" and level == 1:
+        #     #    # If the code block is level 1 and over 80 characters long,
+        #     #    # we are going to bound it by parens. As always, we need to
+        #     #    # handle this backwards, so we are only going to append after
+        #     #    # we are done processing the code block.
+
+        print("#############")
         return data, tree
 
     def process_code_block(data, level, code_block):
