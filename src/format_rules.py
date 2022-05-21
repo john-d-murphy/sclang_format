@@ -105,9 +105,11 @@ class Helpers(object):
         cursor = tree.walk()
 
         nodes_to_investigate = [
+            "arithmetic_series",
             "code_block",
-            "variable_definition",
             "function_block",
+            "method_name",
+            "variable_definition",
         ]
 
         reached_root = False
@@ -117,49 +119,83 @@ class Helpers(object):
         while reached_root == False:
 
             if cursor.node.type in nodes_to_investigate:
-                yield cursor.node, level, parents
+                yield cursor.node, level, end_of_block
+
+            # print(
+            #     Helpers.get_start_of_node(cursor.node, newline_offsets) + 1,
+            #     cursor.node.type,
+            #     cursor.node.text,
+            #     end_of_block,
+            # )
+
+            if (
+                len(end_of_block) > 0
+                and Helpers.get_start_of_node(cursor.node, newline_offsets)
+                >= end_of_block[-1]
+            ):
+                end_of_block.pop()
 
             if cursor.goto_first_child():
                 if cursor.node.type in nodes_to_investigate:
-                    print(
-                        "APPENDING %d",
-                        Helpers.get_length_of_node(
-                            cursor.node, newline_offsets
-                        ),
-                    )
                     level = level + 1
-                    parents.append(cursor.node)
+                    # parents.append(cursor.node)
+                    # print(
+                    #     "***** APPENDING %s - %d - %d"
+                    #     % (
+                    #         cursor.node,
+                    #         Helpers.get_length_of_node(
+                    #             cursor.node, newline_offsets
+                    #         ),
+                    #         Helpers.get_end_of_node(
+                    #             cursor.node, newline_offsets
+                    #         ),
+                    #     )
+                    # )
+                    end_of_block.append(
+                        Helpers.get_end_of_node(cursor.node, newline_offsets)
+                    )
                 continue
 
             if cursor.goto_next_sibling():
                 if cursor.node.type in nodes_to_investigate:
-                    parents.append(cursor.node)
-                    print(
-                        "APPENDING %d",
-                        Helpers.get_length_of_node(
-                            cursor.node, newline_offsets
-                        ),
+                    # parents.append(cursor.node)
+                    # print(
+                    #     "***** APPENDING %s - %d - %d"
+                    #     % (
+                    #         cursor.node,
+                    #         Helpers.get_length_of_node(
+                    #             cursor.node, newline_offsets
+                    #         ),
+                    #         Helpers.get_end_of_node(
+                    #             cursor.node, newline_offsets
+                    #         ),
+                    #     )
+                    # )
+                    end_of_block.append(
+                        Helpers.get_end_of_node(cursor.node, newline_offsets)
                     )
                     level = level + 1
                 continue
 
             retracing = True
             while retracing:
-                print("RETRACING", cursor.node.type)
+                # print("RETRACING", cursor.node.type)
                 if cursor.node.type in nodes_to_investigate:
-                    print("DECREMENTING", cursor.node.type)
-                    parents.pop()
+                    # print("DECREMENTING", cursor.node.type)
+                    # parents.pop()
                     level = level - 1
                 if not cursor.goto_parent():
                     if cursor.node.type in nodes_to_investigate:
-                        print("DECREMENTING", cursor.node.type)
-                        parents.pop()
+                        # print("DECREMENTING", cursor.node.type)
+                        # parents.pop()
                         level = level - 1
                     retracing = False
                     reached_root = True
 
                 if cursor.goto_next_sibling():
                     retracing = False
+
+        print(end_of_block)
 
     @staticmethod
     def traverse_tree(tree: Tree):
@@ -974,6 +1010,9 @@ class IndentFile(FormatRule):
         # Get newline data for the tree.
         newline_offsets = Helpers.get_all_newline_offsets(data)
 
+        # Create List of locations for indented lines
+        indents = []
+
         # Helpers.print_tree(tree)
 
         # Top level = everything in the tree where the parent is
@@ -981,36 +1020,113 @@ class IndentFile(FormatRule):
 
         # Get all of the code blocks within the tree.
         # top_level_nodes = Helpers.get_significant_tree_nodes(tree)
-        for node, level, parents in Helpers.get_significant_tree_nodes(
-            newline_offsets, tree
-        ):
-            start_line = node.start_point[0]
-            start_offset = node.start_point[1]
-            end_line = node.end_point[0]
-            end_offset = node.end_point[1]
-            start_matched_char_loc = newline_offsets[start_line] + start_offset
-            end_matched_char_loc = newline_offsets[end_line] + end_offset
 
-            print(
-                "%-20s - Parents: %d - Length: %4d - Text: %s"
-                % (
-                    node.type,
-                    len(parents),
-                    end_matched_char_loc - start_matched_char_loc,
-                    node.text,
-                ),
-            )
+        # This needs to somehow be recursive
+        # for node, level, blocks in Helpers.get_significant_tree_nodes(
+        #     newline_offsets, tree
+        # ):
+        #     start_line = node.start_point[0]
+        #     start_offset = node.start_point[1]
+        #     end_line = node.end_point[0]
+        #     end_offset = node.end_point[1]
+        #     start_matched_char_loc = newline_offsets[start_line] + start_offset
+        #     end_matched_char_loc = newline_offsets[end_line] + end_offset
 
-            # if start_offset == 0:
-            #    print(node)
-            #    print(
-            #        "Length: ",
-            #        end_matched_char_loc - start_matched_char_loc,
-            #        "Level: ",
-            #        level,
-            #    )
-            #    print(data[start_matched_char_loc:end_matched_char_loc])
-            #    print("#############")
+        #     print(
+        #         "%-20s - Current Position: %-4d - Blocks: %15s %6d - Length: %4d - Text: %s"
+        #         % (
+        #             node.type,
+        #             start_matched_char_loc,
+        #             blocks,
+        #             len(blocks),
+        #             end_matched_char_loc - start_matched_char_loc,
+        #             node.text,
+        #         ),
+        #     )
+
+        #     # tree = Helpers.get_tree(parser, data, None)
+
+        #     if len(blocks) > 1:
+        #         indents.append((node, len(blocks) - 1))
+
+        # Let's do a DFS with the tree walker - we can decide as we're
+        # going through if we need
+
+        cursor = tree.walk()
+        reached_root = False
+        nodes_to_investigate = [
+            "arithmetic_series",
+            "code_block",
+            "function_block",
+            "method_name",
+            "variable_definition",
+        ]
+
+        while reached_root == False:
+
+            # print(cursor.node.start_point)
+
+            # Check Cursor
+            if cursor.node.type in nodes_to_investigate:
+                node = cursor.node
+                newline_offsets = Helpers.get_all_newline_offsets(data)
+                text_start = Helpers.get_start_of_node(node, newline_offsets)
+                text_end = Helpers.get_end_of_node(node, newline_offsets)
+                node_start = node.start_point
+
+                data = data[: text_start + 1] + "\x44" + data[text_start + 1 :]
+                old_node_end = (node.end_point[0], node.end_point[1])
+                new_node_end = (node.end_point[0], node.end_point[1] + 1)
+
+                print(node)
+                print(data)
+                print(old_node_end)
+                print(new_node_end)
+                print(type(node.end_point[0]))
+                # node_end = (node.end_point[0] + 1, 0)
+                tree.edit(
+                    # Bytes
+                    start_byte=text_start,
+                    old_end_byte=text_start + 1,
+                    new_end_byte=text_start + 2,
+                    # Nodes
+                    start_point=node_start,
+                    old_end_point=old_node_end,
+                    new_end_point=new_node_end,
+                )
+                print("############")
+
+            # Rebuild Tree If Anything Changed
+
+            if cursor.goto_first_child():
+                continue
+
+            if cursor.goto_next_sibling():
+                continue
+
+            retracing = True
+            while retracing:
+                if not cursor.goto_parent():
+                    retracing = False
+                    reached_root = True
+
+                if cursor.goto_next_sibling():
+                    retracing = False
+
+        # print("###########")
+        # for indent in reversed(indents):
+        #     print(indent, indent[0].text)
+
+        # if start_offset == 0:
+        #    print(node)
+        #    print(
+        #        "Length: ",
+        #        end_matched_char_loc - start_matched_char_loc,
+        #        "Level: ",
+        #        level,
+        #    )
+        #    print(data[start_matched_char_loc:end_matched_char_loc])
+        #    print("#############")
         #     # Check to see what level this code block is on.
         #     # bound_with_parens = False
         #     # code_block
@@ -1023,5 +1139,5 @@ class IndentFile(FormatRule):
         print("#############")
         return data, tree
 
-    def process_code_block(data, level, code_block):
-        pass
+    # def process_code_block(data, level, code_block):
+    #    pass
