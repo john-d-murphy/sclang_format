@@ -1062,39 +1062,102 @@ class IndentFile(FormatRule):
             "variable_definition",
         ]
 
+        # As a hack - newline doesn't play well with updates to the tree.
+        # From what I can tell, the newline character is special to the tree
+        # and putting it in an update to the tree causes the nodes to get out
+        # of whack.
+        #
+        # For example, putting in a new_node_end of (1,0) will parse happily into
+        # the tree edit, but when stepping into the next node, the end point will
+        # be a massive number, looking almost like an integer overflow.
+        #
+        # Therefore, as a hack e are going to put a form feed '\f' in place of a
+        # newline for now and then update the code with a real solution when
+        # I have talked through it with the relevant developers of the
+        # treesitter tool.
+
         while reached_root == False:
 
             # print(cursor.node.start_point)
+            # print(cursor.node.type)
 
             # Check Cursor
             if cursor.node.type in nodes_to_investigate:
-                node = cursor.node
-                newline_offsets = Helpers.get_all_newline_offsets(data)
-                text_start = Helpers.get_start_of_node(node, newline_offsets)
-                text_end = Helpers.get_end_of_node(node, newline_offsets)
-                node_start = node.start_point
+                if cursor.node.type == "function_block":
+                    argument_check_cursor = cursor
+                    # Expected "{"
+                    argument_check_cursor.goto_first_child()
+                    # Will either be parameter list, var, or a statement
+                    # If the next sibling is a parameter list, we'll add
+                    # a newline after the parameter list, else we'll add
+                    argument_check_cursor.goto_next_sibling()
+                    print(argument_check_cursor.node.type)
+                    newline_offsets = Helpers.get_all_newline_offsets(data)
+                    if argument_check_cursor.node.type == "parameter_list":
+                        node = argument_check_cursor.node
+                        text_start = Helpers.get_start_of_node(
+                            node, newline_offsets
+                        )
+                        text_end = Helpers.get_end_of_node(
+                            node, newline_offsets
+                        )
+                        node_start = node.start_point
+                        data = data[:text_end] + "\n" + data[(text_end + 1) :]
+                        old_node_end = (node.end_point[0], node.end_point[1])
+                        new_node_end = (
+                            node.end_point[0],
+                            node.end_point[1],
+                        )
+                    else:
+                        node = cursor.node
+                        data = data[:text_start] + "\n" + data[text_start + 1 :]
+                        old_node_end = (node.end_point[0], node.end_point[1])
+                        new_node_end = (
+                            node.end_point[0],
+                            node.end_point[1],
+                        )
 
-                data = data[: text_start + 1] + "\x44" + data[text_start + 1 :]
-                old_node_end = (node.end_point[0], node.end_point[1])
-                new_node_end = (node.end_point[0], node.end_point[1] + 1)
+                    tree.edit(
+                        # Bytes
+                        start_byte=text_start,
+                        old_end_byte=text_start + 1,
+                        new_end_byte=text_start + 1,
+                        # Nodes
+                        start_point=node_start,
+                        old_end_point=old_node_end,
+                        new_end_point=new_node_end,
+                    )
 
-                print(node)
-                print(data)
-                print(old_node_end)
-                print(new_node_end)
-                print(type(node.end_point[0]))
-                # node_end = (node.end_point[0] + 1, 0)
-                tree.edit(
-                    # Bytes
-                    start_byte=text_start,
-                    old_end_byte=text_start + 1,
-                    new_end_byte=text_start + 2,
-                    # Nodes
-                    start_point=node_start,
-                    old_end_point=old_node_end,
-                    new_end_point=new_node_end,
-                )
-                print("############")
+                else:
+                    node = cursor.node
+                    newline_offsets = Helpers.get_all_newline_offsets(data)
+                    text_start = Helpers.get_start_of_node(
+                        node, newline_offsets
+                    )
+                    text_end = Helpers.get_end_of_node(node, newline_offsets)
+                    node_start = node.start_point
+
+                    data = data[:text_start] + "\n" + data[text_start:]
+                    old_node_end = (node.end_point[0], node.end_point[1])
+                    new_node_end = (node.end_point[0], node.end_point[1] + 1)
+
+                    # print(node)
+                    # print(data)
+                    # print(old_node_end)
+                    # print(new_node_end)
+                    # print(type(node.end_point[0]))
+                    # node_end = (node.end_point[0] + 1, 0)
+                    tree.edit(
+                        # Bytes
+                        start_byte=text_start,
+                        old_end_byte=text_start + 1,
+                        new_end_byte=text_start + 2,
+                        # Nodes
+                        start_point=node_start,
+                        old_end_point=old_node_end,
+                        new_end_point=new_node_end,
+                    )
+                    # print("############")
 
             # Rebuild Tree If Anything Changed
 
@@ -1136,7 +1199,8 @@ class IndentFile(FormatRule):
         #     #    # handle this backwards, so we are only going to append after
         #     #    # we are done processing the code block.
 
-        print("#############")
+        # data = re.sub("\f", "\n", data)
+
         return data, tree
 
     # def process_code_block(data, level, code_block):
