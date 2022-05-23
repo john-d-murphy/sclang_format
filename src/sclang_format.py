@@ -44,7 +44,7 @@ inline_format = [
     fr.FormatReturnStatement,
     fr.ParameterListAlignment,
 ]
-post_format = [fr.IndentFile, fr.EndOfFileNewLine]
+post_format = [fr.AddNewlinesInFunctions, fr.IndentFile, fr.EndOfFileNewLine]
 
 ### Main
 
@@ -136,6 +136,13 @@ def parse_arguments():
         "--use_tabs",
         help="Use Tabs for spacing - default (True)",
         default=True,
+    )
+
+    parser.add_argument(
+        "-x",
+        "--maximum_line_length",
+        help="Maximum Line Length - default (80)",
+        default=80,
     )
 
     arguments = parser.parse_args()

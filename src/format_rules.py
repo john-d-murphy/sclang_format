@@ -997,6 +997,103 @@ class UseTrailingClosureSyntax(FormatRule):
 
 ## Indentation
 
+# Do the heavy lifting of adding newlines in the appropriate places -
+# checks for line length, indentation, length of functions, etc.
+# Heavy logic here, so it expects that all text has been normalized and
+# handled properly in the previous sections.
+#
+# Expected result after this method is called is that the data has newlines
+# in all the appropriate places, with functions being collapsed or expanded
+# as needed.
+class AddNewlinesInFunctions(FormatRule):
+    @staticmethod
+    def _FormatRule__format(arguments, data, tree, parser, language):
+        query = language.query(
+            """
+          (function_block) @function_block
+          """
+        )
+
+        # When we are determining how many statements a function has,
+        # we are going to not include the parameter list and the semi-
+        # colons. Likwise, we are going to not include any line that
+        # starts with "var" as a statement.
+        type_filters = [";", "parameter_list", "{", "}"]
+        line_filter = "var "
+
+        captures, newline_offsets = Helpers.get_query_result_and_newline_data(
+            tree, query, data
+        )
+
+        for function_block in captures:
+            # print(function_block)
+            start_line = function_block[0].start_point[0]
+            start_offset = function_block[0].start_point[1]
+            end_line = function_block[0].end_point[0]
+            end_offset = function_block[0].end_point[1]
+            start_matched_char_loc = newline_offsets[start_line] + start_offset
+            end_matched_char_loc = newline_offsets[end_line] + end_offset
+
+            function_length = end_matched_char_loc - start_matched_char_loc
+            children = list(
+                filter(
+                    lambda child: (
+                        not child.text.decode("ascii").startswith(line_filter)
+                        and not child.type in type_filters
+                    ),
+                    function_block[0].children,
+                )
+            )
+            var_list = list(
+                filter(
+                    lambda child: (
+                        child.text.decode("ascii").startswith(line_filter)
+                    ),
+                    function_block[0].children,
+                )
+            )
+
+            # If we have at most three statements in the function, we only have one
+            # var statement *and* we have less than 80 characters in the line, we will
+            # make sure the entire function is on one line.
+            # Else, we'll separate the function into multiple lines per the style
+            # guidelines above.
+            if (
+                len(children) <= 3
+                and function_length <= arguments.maximum_line_length
+                and len(var_list) == 1
+            ):
+                function_text = re.sub(
+                    "\n", "", function_block[0].text.decode("ascii")
+                )
+            else:
+                # If we have a long function, we're going to go through the children
+                # and put a newline after any semicolon, and then a newline after the
+                # return statment if it doesn't have a semicolon.
+                function_text = re.sub(
+                    "; ", ";\n", function_block[0].text.decode("ascii")
+                )
+
+                # And the end of the argument list, if it exists
+                function_text = re.sub("\| var", "|\nvar", function_text)
+
+                # Normalize to one space if double happened by mistake
+                function_text = re.sub("\n\n", "\n", function_text)
+
+                # We've already normalized the return statement to not have a
+                # semicolon, so we need to update that too
+                function_text = re.sub("}$", "\n}", function_text)
+
+            # Join this function's data
+            data = (
+                data[:start_matched_char_loc]
+                + function_text
+                + data[end_matched_char_loc:]
+            )
+
+        return data, tree
+
+
 # Apply indentation and formatting rules to the code tree.
 # Rules:
 #  From Drew DeVault:
